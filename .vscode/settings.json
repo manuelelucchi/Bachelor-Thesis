@@ -1,0 +1,22 @@
+{
+    "editor.formatOnSave": false,
+    "editor.wordWrap": "on",
+    "files.exclude": {
+        "**/*_temp.tex":true,
+        "**/*.gz": true,
+        "**/*.log": true,
+        "**/*.xml": true,
+        "**/*.aux": true,
+        "**/*.*_latexmk": true,
+        "**/*.*busy)": true,
+        "**/*.bcf": true,
+        "**/*.bbl": true,
+        "**/*.blg": true,
+        "**/*.out": true,
+        "**/*.fls": true,
+        "**/*.toc": true,
+        "**/*.nav": true,
+        "**/*.snm": true,
+        "**/*.tex": false,
+    }
+}

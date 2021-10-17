@@ -1,0 +1,30 @@
+\providecommand{\main}{..}
+\documentclass[\main/main.tex]{subfiles}
+\begin{document}
+\chapter*{Conclusione}
+\addcontentsline{toc}{chapter}{Conclusione}
+
+Riassumendo, durante il periodo presso Micromed ci si è concentrati sulla progettazione, lo sviluppo e l'integrazione con altri software di un modulo software per la gestione di dati centralizzati.\\
+Avendo già la quasi totalità dei requisiti necessari, la progettazione è risultata molto lineare ed ha necessitato di poche correzioni durante le fasi successive.\\
+Per quanto riguarda l'implementazione, è stata posta molta attenzione sull'interfacciamento che il modulo avrebbe avuto con i software che lo avrebbero utilizzato, in modo da semplificare l'integrazione fornendo allo stesso tempo tutti gli strumenti necessari per sfruttarlo appieno.\\
+L'integrazione è stata invece una grande occasione per testare il modulo nella maggioranza dei possibili scenari, con diversi tipi di settaggi più o meno complessi e con il complesso sistema di threading di WPF.
+
+\section{Possibili sviluppi futuri}
+In futuro la soluzione potrebbe ricevere svariati aggiornamenti riguardanti soprattutto l'implementazione di alcuni servizi.\\
+Ad esempio, il servizio che gestisce la sincronizzazione e che attualmente esegue tutte le operazioni localmente connettendosi al database remoto, potrebbe essere modificato in modo da esternalizzare queste operazioni in un server (potenzialmente posizionato al di fuori della rete locale) con il quale il client utilizzatore del modulo potrebbe comunicare attraverso richieste HTTP.\\
+Inoltre, le policy e il relativo software per la gestione sono stati solo parzialmente progettati e con una totale assenza di implementazione, ma come anticipato in precedenza la struttura con cui è stato creato il modulo permette di procedere con l'integrazione di quest'ultimo in altri software anche nelle condizioni appena citate.\\
+
+Per semplificare l'integrazione, si potrebbe sfruttare una funzionalità di C\# disponibile solo da .NET 5 in poi, ossia i \textbf{Source Generators}.\\
+Si tratta di un sistema che permette di generare codice (solitamente in background precedentemente alla compilazione) per automatizzare lunghe operazioni evitando l'utilizzo della reflection.\\
+Per esempio, Microsoft li utilizza in EFCore per convertire le query LINQ in codice SQL in fase di compilazione, oppure per generare il codice necessario ad effettuare la serializzazione e deserializzazione di una specifica classe in formato JSON.\\
+Nel caso della soluzione in esame, si tratterebbe della generazione dei contenitori di settaggi citati in precedenza, che potrebbero ad esempio essere generati in automatico partendo da un semplice file di testo nel quale viene specificato per ciascun settaggio il tipo, il nome, lo scope e l'id, riducendo il codice necessario da scrivere e mantenere.\\
+
+Si possono ottimizzare i parametri relativi alla serializzazione di oggetti complessi nel database, in particolare lo spazio occupato e le performance, utilizzando formati diversi da JSON, come \textbf{MessagePack} \cite{messagepack} o \textbf{Protocol Buffers} \cite{protobuf}\\
+
+\section{Impatto della pandemia}
+La pandemia ha avuto un impatto relativamente basso sullo sviluppo, in quanto l'azienda che possiede diverse filiali in tutto il mondo, si era già dotata di una \textbf{VPN} per l'accesso ai repository e archivi salvati localmente nella sede principale.\\
+Di conseguenza, qualsiasi dipendente è stato in grado di lavorare da remoto senza particolari limitazioni.\\
+Inoltre, come accennato in precedenza, IBM Rational fornisce una serie di strumenti di collaborazione come ad esempio il tracking dei bug o delle feature da implementare, strumenti utili sia in presenza ma soprattutto per il lavoro remoto.\\
+Come strumento di comunicazione e condivisione di documenti sono stati usati Microsoft Teams e posta elettronica.\\
+
+\end{document}

@@ -1,0 +1,105 @@
+\providecommand{\main}{..}
+\documentclass[\main/tesi.tex]{subfiles}
+\begin{document}
+\chapter{Implementazione}
+
+\section{Regole generali codice}
+
+\subsection{Clean Code}
+
+Parte del rinnovamento dei software di Micromed è composto da una standardizzazione del codice scritto dagli sviluppatori, per garantirne la chiarezza.\\
+Mentre software preesistenti richiedono un pesante refactor che deve essere portato a termine in fasi graduali, la soluzione dei settaggi centralizzati è stata sviluppata da zero e per questo si è deciso anteriormente allo sviluppo di seguire un gruppo convenzioni relative allo sviluppo software chiamate \textbf{Clean Code}.\\
+Molte di queste convenzioni sono agnostiche rispetto al linguaggio di programmazione utilizzato, mentre altre sono profondamente legate al mondo .NET e al linguaggio C\#.\\
+Come riferimento sono state sfruttate le linee guida fornite da alcuni membri della community attraverso il progetto \textbf{Clean Code .NET} \cite{cleancode}.\\
+Per facilitare gli sviluppatori nel rispetto delle convenzioni del Clean Code sono stati utilizzati due strumenti:
+\begin{itemize}
+    \item I Roslyn Analyzers, ossia estensioni del compilatore del C\# che analizzano a \textit{build-time} il codice e permettono di aggiungere suggerimenti e warning custom rispetto a quelli di default, in questo caso relativi convenzioni Clean Code.\\Queste analisi possono essere eseguite sull'intero progetto con lo scopo di individuare e correggere in automatico stili non conformi.
+    \item L'utilizzo dei file con estensione "editorconfig" \cite{editorconfig}, che contengono impostazioni relative alla formattazione del codice che, a seconda del livello di severità impostato, l'IDE andrà a suggerire o addirittura a segnalare come errore.\\Inoltre l'IDE può applicare la formattazione corretta in automatico su richiesta.
+\end{itemize}
+
+\subsection{Enumerazioni ed indici}
+
+Come approfondito in precedenza, i \textbf{SettingSet} si comportano come un insieme non ordinato di settaggi dello stesso tipo.\\
+SettingSet implementa le interfacce per le collezioni fornite dalla libreria standard, come \textbf{IEnumerable} e \textbf{ICollection}, che permettono di utilizzare le query Linq per un approccio funzionale alla gestione dei dati, che sono il modo corretto di effettuare operazioni sugli elementi contenuti nella collezione.\\
+Un limite di questa classe riguarda infatti gli elementi che contiene, ossia i \textbf{SettingLeaf} che come spiegato nella sezione \ref{strutturesupporto} hanno un lifetime \textit{garantito} limitato ad una singola operazione.\\
+Questo ha portato ad un refactor delle porzioni di codice che utilizzano i Montaggi o altri oggetti che sarebbero stati in seguito salvati dentro a dei SettingSet, in modo che tutte le operazioni che riguardano gli elementi contenuti siano atomiche e che nessun riferimento ad essi venga mantenuto in memoria.\\
+Inoltre sono stati rimossi tutti gli accessi agli elementi che utilizzavano degli indici (in precedenza le collezioni di settaggi venivano caricate sotto forma di liste indicizzabili) in quanto i database nei quali vengono salvati i valori non danno alcuna garanzia rispetto all'ordine nel quale vengono letti.
+
+\subsection{Containers di settaggi}
+
+Nella sezione \ref{strutturesupporto} è stato introdotto il concetto dei "contenitori", ossia classi che contengono riferimenti a Setting o SettingSet e hanno come scopo principale di raggruppare i settaggi secondo le logiche scelte dai programmatori che utilizzeranno il modulo.\\
+Questi contenitori infatti non sono parte della soluzione sviluppata ma la utilizzano creando classi che rispettano tutti i criteri necessari per poter essere registrate nel SettingService.\\
+In particolare, ciascuna di queste classi deve estendere la classe \textbf{SettingsModel}, della quale è necessario effettuare l'override del metodo \textbf{OnSettingCreating}.\\
+Questo metodo, che verrà richiamato dal servizio durante il caricamento iniziale, ha come argomento un oggetto di classe \textbf{SettingsModelBuilder}, che permette di registrare tutte le proprietà Setting e SettingSet utilizzando rispettivamente i metodi \textit{AddField} e \textit{AddSet}.\\
+Questi metodi richiedono come argomenti:
+\begin{itemize}
+    \item Un \textbf{UUID} \cite{uuid} (costante) che ha come ruolo identificare univocamente il settaggio.\\È stato scelto di applicare tale identificatore in modo costante in quanto il nome o il tipo del settaggio a cui fa riferimento potrebbe cambiare nel tempo, mentre questo argomento rimarrebbe immutato in qualsiasi caso.
+    \item Il nome del settaggio (ottenuto attraverso concatenando il nome della classe e il nome del campo separati da un punto).
+    \item Lo scope del settaggio, di tipo \textbf{SettingScope}.
+    \item Opzionalmente, il valore di default del settaggio.\\
+\end{itemize}
+Grazie a queste operazioni, il modulo può creare dei singleton di ciascun container e collegarne le proprietà al database, in modo che siano a disposizione i valori aggiornati.\\
+Per quanto riguarda le proprietà aggiunte dal programmatore nel contenitore, è importante che siano in sola lettura (per evitare assegnamenti non previsti) e che ad ogni richiesta del valore (si ricorda che in C\# le proprietà sono l'equivalente di metodi senza parametri che restituiscono un valore), restituiscano la stessa istanza del settaggio, attraverso dei metodi dedicati che richiedono il nome del settaggio come argomento.\\
+Data la scarsa comodità e possibilità di errore nel richiedere per ogni settaggio che venga specificato il nome una seconda volta sotto forma di stringa, esso è ottenuto automaticamente attraverso l'attributo \textbf{CallerMemberName} \cite{callermembername}.
+
+\section{Comunicazione con il Database}
+
+\subsection{DbContext}
+
+Un \textbf{DbContext} è una classe .NET che rappresenta la \textit{mappatura} di un database in Entity Framework Core.\\
+Di conseguenza, gestisce anche la connessione ad esso.\\
+È importante notare alcune particolarità relative al DbContext che sono gestite diversamente rispetto ad altri ecosistemi di sviluppo software.\\
+Un DbContext è una \textbf{Unit of Work}, ossia gli oggetti di classi che estendono DbContext hanno un \textit{lifetime} della durata di una singola operazione atomica (rispetto al database).\\
+Una volta portata a termine tale operazione o in caso di errore, l'istanza viene \textit{disposta}.\\
+In C\#, un oggetto disposto è un oggetto per il quale è stata implementata l'interfaccia \textbf{IDisposable} e invocato il metodo Dispose, che si occupa di fermare operazioni in corso e liberare risorse.\\
+Questo pattern funziona similmente al concetto di \textit{distruttore} del linguaggio C++, con la differenza che il dispose viene richiamato per terminare la vita "logica" di un oggetto, diventando inutilizzabile dal punto di vista funzionale ma continuando ad esistere in memoria (in attesa di essere eliminato dal \textbf{Garbage Collector}), mentre in C++ l'esecuzione del distruttore assicura la successiva immediata rimozione dell'oggetto dalla memoria.\\
+Un altro modo per richiamare questo metodo è attraverso la sintassi \textbf{using}, che crea uno scope nel quale l'oggetto che implementa IDisposable sarà utilizzabile, per poi essere disposto automaticamente.\\
+L'utilizzo di questo pattern comporta che la connessione al database non sia perpetua, ma venga chiusa ogni volta.\\
+Questo causa un leggero \textit{overhead} dovuto alla continua creazione di nuove connessioni, ma evita che il DbContext accumuli troppi riferimenti ad entità caricate in memoria.\\
+Inoltre, i DbContext non sono \textit{thread-safe}, di conseguenza il loro utilizzo condiviso tra multipli thread avrebbe risultati non prevedibili mentre utilizzandoli come Unit of Work non viene salvato nessun riferimento che possa essere condiviso.
+Nel caso dell'utilizzo con le Dependency Injection, non è necessario né chiamare manualmente il metodo Dispose né utilizzare la sintassi \textit{using}, in quanto il container gestirà automaticamente i lifetime degli oggetti in base a come sono stati registrati (come spiegato nella sezione \cite{ioc}).\\
+Questi accorgimenti nell'utilizzare i DbContext sono consigliati da Microsoft stessa e sono stati ripresi nell'implementazione della soluzione \cite{dbcontext}.\\
+
+\subsection{Migrazioni}
+
+Per riprendere quanto spiegato nella sezione \ref{efcore}, le migrazioni sono un aggiornamento della struttura del database eseguito attraverso degli script SQL.\\
+Nel caso di EFCore, gli script sono sostituiti da classi C\# contenenti codice autogenerato che esegue la migrazione.\\
+Questo codice viene generato dai tool forniti assieme ad EFCore, che compilano ed analizzano gli assembly del progetto e, sulla base del DbContext e della stringa di connessione, generano il codice necessario ad effettuare la migrazione \cite{migrations}.\\
+L'esecuzione della migrazione viene effettuata in modo asincrono attraverso un \textbf{BrackgroundService} \cite{backgroundservice}.
+
+\subsection{Query}
+
+Una funzionalità (che nasce nei linguaggi funzionali) utilizzata pesantemente nel modulo è il \textbf{lazy loading} delle query, ossia la capacità di rimandare l'esecuzione della query verso il database a quando il risultato è effettivamente necessario.\\
+Nella soluzione questa funzionalità è stata utilizzata per caricare il valore dei settaggi, in quanto la query che restitusce il valore dello specifico settaggio viene eseguita solo quando quest'ultimo viene richiesto dal software che utilizza il modulo, in modo da non creare un eccessivo rallentamento per il caricamento contemporaneo di tutti i settaggi quando l'utente avvia il programma.\\
+Tutte le query sono inoltre \textbf{asincrone}, ossia eseguite in modo non bloccante, in questo caso rispetto al thread principale dei software che utilizzano il modulo, ossia il thread dedicato alla UI.\\
+Questo permette alla UI di essere responsiva anche mentre si stanno eseguendo operazioni lente come per l'appunto degli accessi I/O.
+
+\subsection{Transazioni}
+\label{transazioni}
+
+Tutti i DBMS principali supportanto le cosiddette transazioni, ossia la possibilità di eseguire delle query che vanno a modificare il contenuto del database creando in precedenza dei punti di ripristino, che permettano di annullare le modifiche in caso di errore.\\
+EFCore, in quanto ORM che supporta questi DBMS, le supporta utilizzando il \textit{dispose pattern} introdotto in precedenza.\\
+Prima che venga chiamato il dispose, deve essere eseguito un \textit{commit} delle modifiche, altrimenti sarà eseguito un \textit{rollback} al punto precedente.\\
+Per questo progetto, che richiede una modifica a due database (remoto e locale) durante la stessa operazione, ossia la sincronizzazione, il concetto di transazione è stato essenziale.\\
+Quando si esegue la sincronizzazione infatti, vengono prima applicate le modifiche verso il database remoto mantenendo però aperta la transazione, che viene chiusa solo nel caso anche la transazione locale sia andata a buon fine.\\
+Questi vincoli garantiscono l'impossibilità che i due database divergano nei valori senza che la divergenza sia prevista e gestita dal sistema.
+
+\subsection{Serializzazione}
+\label{serializationimplementation}
+La serializzazione di tipi complessi avviene tramite la libreria Newtonsoft.JSON.\\
+In particolare, per implementare quanto progettato nella sezione \ref{serialization}, viene creato un serializzatore custom, creando una classe che eredita \textbf{JsonConverter} e ne fa l'override di due metodi, \textit{WriteJson} che serializza e \textit{ReadJson} che deserializza.\\
+Questi metodi sono stati implementati in modo ricorsivo per navigare all'interno del \textit{JObject} e serializzare (o salvare in una mappa nel caso della deserializzazione) i campi del json non presenti nei metadata della classe associata.\\
+Dato che questa mappa è necessaria per garantire la retrocompatibilità, deve essere presente in tutti gli oggetti "complessi" che saranno serializzati.\\
+Di conseguenza, ciascuno di questi oggetti dovrà ereditare la classe \textbf{SettingVersion}, che contiene questa mappa.
+
+\subsection{Multithreading e WPF}
+La soluzione fa ampio utilizzo del threading in due diversi scenari.\\
+Il primo è implicito attraverso l'utilizzo di \textbf{async/await}, che rende non bloccanti alcune operazioni pesanti (ad esempio l'I/O).\\
+Questo utilizzo è molto importante in applicazioni grafiche nelle quali il thread principale è anche il thread che gestisce l'UI, come nel caso di applicazioni sviluppate in WPF.\\
+Di conseguenza, se il thread principale è impegnato in una operazione lunga, l'UI smetterà di essere responsiva e le funzioni asincrone servono proprio ad evitarlo.\\
+
+Il secondo caso consiste in una \textit{Task} asincrona creata esplicitamente (e quindi gestita come un thread separato che viene eseguito contemporaneamente all'esecuzione dello UI-thread) che gestisce la sincronizzazione automatica.\\
+Questa funzionalità introduce un problema in quanto l'aggiornamento della UI deve avvenire solo da parte del thread relativo ma, dato che questa Task rappresenta un thread separato che notifica la UI attraverso l'interfaccia \textbf{INotifyPropertyChanged} citata nella sezione \ref{mvvm}, creerebbe un errore.\\
+In questo caso, attraverso l'utilizzo della classe \textbf{SynchronizationContext}, si è potuto comunicare con il thread della UI in modo sicuro e veloce.
+
+\end{document}
